@@ -4,14 +4,6 @@ import pandas as pd
 from scipy.optimize import curve_fit
 
 
-def concat_data(file_list, export_path):
-    export_df = pd.DataFrame()
-    for file in file_list:
-        data_df = pd.read_csv(file)
-        export_df = pd.concat([export_df, data_df], ignore_index=True)
-    export_df.to_csv(export_path, index=None)
-
-
 def fit_dec(y_data, plate_size, fit_type="log"):
     x_384 = [0.000000000000075, 0.00000000000025, 0.00000000000075, 0.0000000000025, 0.0000000000075, 0.000000000025, 0.000000000075, 0.00000000025, 0.00000000075, 0.0000000025, 0.0000000075, 0.000000025, 0.000000075, 0.00000025, 0.00000075, 0.0000025]
     x_96 = [0.0000000000002083, 0.000000000002083, 0.00000000002083, 0.0000000002083, 0.000000002083, 0.00000002083, 0.0000002083, 0.000002083]
