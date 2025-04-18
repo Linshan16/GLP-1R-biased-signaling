@@ -3,8 +3,87 @@ import pandas as pd
 import torch
 from esm import FastaBatchedDataset, pretrained
 import requests
-import csv
 import numpy as np
+import json
+
+
+def load_config(config_path):
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            print(f"警告：{config_path} 不是有效的 JSON 文件，将覆盖！")
+    else:
+        data = {}
+    return data
+
+
+def update_config(config_dict, config_path, mode="update"):
+    # 初始化数据
+    if mode == "update":
+        # 检查文件是否存在且有效
+        data = load_config(config_path)
+        # 更新数据
+        data.update(config_dict)
+    elif mode == "overwrite":
+        data = config_dict
+    # 保存文件
+    with open(config_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4, ensure_ascii=False)
+
+
+def data_parser(data_df, plate_size, a1_loc):
+    row_num = int(np.sqrt(plate_size/3/2)*2)
+    col_num = int(np.sqrt(plate_size/3/2)*3)
+    data_array = np.array(data_df.iloc[a1_loc[0]:a1_loc[0] + row_num, a1_loc[1]:a1_loc[1] + col_num]).astype(np.float32).reshape(1, plate_size)
+    return data_array
+
+
+def find_a1_loc(data_df, first_row="A", first_col="01"):
+    unique_array = []
+    unique_a1 = []
+    plate_sz_list = []
+    for idx in range(len(data_df)):
+        if data_df.iloc[idx,0] == first_row and data_df.iloc[idx-1,1] == first_col and data_df.iloc[idx,1].isdigit():
+            column_size = data_df.iloc[idx].count() - 1
+            plate_size = int((column_size / 3) ** 2 * 6)
+            arr = data_parser(data_df, plate_size, [idx,1])
+            if not any(np.array_equal(arr, existing_arr) for existing_arr in unique_array):
+                unique_array.append(arr)
+                unique_a1.append([idx,1])
+                plate_sz_list.append(plate_size)
+    return unique_a1, plate_sz_list, unique_array
+
+
+def filter_data(data_df, filter_dict):
+    """
+    参数:
+        data_df: 整合后的DataFrame
+        filter_dict={"key1":value1,"key2":value2}
+    返回:
+        筛选后的DataFrame
+    """
+    missing_keys = [key for key in filter_dict.keys() if key not in data_df.columns]
+    assert not missing_keys, f"以下键在 DataFrame 中不存在: {missing_keys}"
+    filtered_df = data_df.copy()
+    for key in filter_dict.keys():
+        filtered_df = filtered_df[filtered_df[key] == filter_dict[key]]
+    return filtered_df
+
+
+def output(data_array, info_dict, out_path):
+    array_df = pd.DataFrame(data_array)
+    file_name = "-".join([info_dict["date"], info_dict["plate"], info_dict["type"], str(info_dict["time"])]) + ".csv"
+    array_df.to_csv(f"{out_path}/{file_name}", index=None, columns=None)
+    config_dict = {file_name: info_dict}
+    update_config(config_dict, f"{out_path}/config.json")
+    return array_df
+
+
+def update_progress(current, total, hint="",ratio=10):
+    if current % (int(total / ratio) + 1) == 0 or current == total:
+        print(f"{hint}{current}/{total}")
 
 
 def prep_dir(receptor, variant):
